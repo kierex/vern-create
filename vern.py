@@ -1,190 +1,178 @@
-import threading
-from queue import Queue
-import requests
-import random
-import string
-import json
-import hashlib
-from faker import Faker
+import requests, re, time, random
+import io, struct, base64, Crypto, binascii
 
-print(f"""
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓           
-> › Github :- @vraxyxx 
-> › By      :- https://www.facebook.com/revn.19
-> › Proxy Support Added by @coopers-lab
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-""")
-print('\x1b[38;5;208m⇼' * 60)
-print('\x1b[38;5;22m•' * 60)
-print('\x1b[38;5;22m•' * 60)
-print('\x1b[38;5;208m⇼' * 60)
+from Crypto.Cipher import AES, PKCS1_v1_5
+from Crypto.PublicKey import RSA
+from Crypto import Random as RDM
+from Crypto.Random import get_random_bytes
+from nacl.public import PublicKey as PK
+from nacl.public import SealedBox as SB
 
-def generate_random_string(length):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+Author = 'Dapunta Khurayra X'
+DefaultUA = 'Mozilla/5.0 (Linux; Android 13; SM-A055F Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/119.0.6045.67 Mobile Safari/537.36'
+HeadersGet = lambda i=DefaultUA : {'Host':'m.facebook.com','Cache-Control':'max-age=0','Upgrade-Insecure-Requests':'1','User-Agent':i,'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7','Sec-Fetch-Site':'none','Sec-Fetch-Mode':'navigate','Sec-Fetch-User':'?1','Sec-Fetch-Dest':'document','Dpr':'1.25','Viewport-Width':'270','Sec-Ch-Ua':'','Sec-Ch-Ua-Mobile':'?1','Sec-Ch-Ua-Platform':'','Sec-Ch-Ua-Platform-Version':'','Sec-Ch-Ua-Model':'','Sec-Ch-Ua-Full-Version-List':'','Sec-Ch-Prefers-Color-Scheme':'dark','Accept-Encoding':'gzip, deflate','Accept-Language':'en-US,en;q=0.9','Priority':'u=0, i'}
+HeadersPost = lambda i=DefaultUA : {'Host':'m.facebook.com','Content-Length':'480','Sec-Ch-Ua':'','Sec-Ch-Ua-Mobile':'?1','User-Agent':i,'Viewport-Width':'360','Content-Type':'application/x-www-form-urlencoded','Sec-Ch-Ua-Platform-Version':'','X-Asbd-Id':'129477','Dpr':'1.25','Sec-Ch-Ua-Full-Version-List':'','Sec-Ch-Ua-Model':'','Sec-Ch-Prefers-Color-Scheme':'dark','Sec-Ch-Ua-Platform':'','Accept':'*/*','Origin':'https://m.facebook.com','Sec-Fetch-Site':'same-origin','Sec-Fetch-Mode':'cors','Sec-Fetch-Dest':'empty','Referer':'https://m.facebook.com/reg','Accept-Encoding':'gzip, deflate','Accept-Language':'en-US,en;q=0.9','Priority':'u=1, i'}
 
-def get_mail_domains(proxy=None):
-    try:
-        response = requests.get("https://api.mail.tm/domains", proxies=proxy, timeout=10)
-        if response.status_code == 200:
-            return response.json().get('hydra:member', [])
-        print(f'[×] E-mail Error : {response.text}')
-    except Exception as e:
-        print(f'[×] Error fetching domains: {e}')
-    return None
+class CreateAccount():
 
-def create_mail_tm_account(proxy=None):
-    fake = Faker()
-    mail_domains = get_mail_domains(proxy)
-    if not mail_domains:
-        return None, None, None, None, None
+    def __init__(self):
+        self.r = requests.Session()
 
-    domain = random.choice(mail_domains).get('domain')
-    username = generate_random_string(10)
-    password = fake.password()
-    birthday = fake.date_of_birth(minimum_age=18, maximum_age=45)
-    first_name = fake.first_name()
-    last_name = fake.last_name()
-
-    url = "https://api.mail.tm/accounts"
-    headers = {"Content-Type": "application/json"}
-    data = {"address": f"{username}@{domain}", "password": password}
-
-    try:
-        response = requests.post(url, headers=headers, json=data, proxies=proxy, timeout=10)
-        if response.status_code == 201:
-            return f"{username}@{domain}", password, first_name, last_name, birthday
+    def SetData(self, name=False, password=False, birthday=False, email=False, phone=False, gender=0):
+        if name!=False: self.name = name
+        else: print("Parameter 'name' Not Found!")
+        if password!=False: self.password = password
+        else: print("Parameter 'password' Not Found!")
+        if birthday!=False: self.birthday = birthday
+        else: print("Parameter 'birthday' Not Found!")
+        if email==False and phone==False: print("Parameter 'email' Or 'phone' Not Found!")
         else:
-            print(f'[×] Email Creation Error : {response.text}')
-    except Exception as e:
-        print(f'[×] Exception during email creation: {e}')
-    return None, None, None, None, None
+            if email!=False: self.email = email
+            elif phone!=False: self.email = phone
+        if gender==0: self.gender = '1'
+        elif gender==1: self.gender = '2'
+        else: print("Parameter 'gender' Not Found!")
 
-def _call(url, params, proxy=None, post=True):
-    headers = {
-        'User-Agent': '[FBAN/FB4A;FBAV/35.0.0.48.273;FBDM/{density=1.33125,width=800,height=1205};FBLC/en_US;FBCR/;FBPN/com.facebook.katana;FBDV/Nexus 7;FBSV/4.1.1;FBBK/0;]'
-    }
-    try:
-        if post:
-            response = requests.post(url, data=params, headers=headers, proxies=proxy, timeout=10)
-        else:
-            response = requests.get(url, params=params, headers=headers, proxies=proxy, timeout=10)
-        return response.json()
-    except Exception as e:
-        print(f'[×] API Call Error: {e}')
-        return {}
+    def Create(self):
+        url = 'https://m.facebook.com/reg?refsrc=deprecated&rtime=%s&hrc=1&soft=hjk'%(str(time.time()))
+        req = self.r.get(url, headers=HeadersGet(), allow_redirects=True).text
+        FixData = {
+            'fb_dtsg':re.search('"dtsg":{"token":"(.*?)"',str(req)).group(1),
+            'jazoest':re.search('name="jazoest" value="(.*?)"',str(req)).group(1),
+            'lsd':re.search('name="lsd" value="(.*?)"',str(req)).group(1),
+            '__dyn':'',
+            '__csr':'',
+            '__req':str(random.randrange(1,7)),
+            '__a':'',
+            '__user':'0'}
+        self.Step1(FixData)
+        self.Step2(FixData)
+        self.Step3(FixData)
+        self.Step4(FixData)
+        self.Step5(FixData)
+        self.FinalStep1(req)
 
-def register_facebook_account(email, password, first_name, last_name, birthday, proxy=None):
-    api_key = '882a8490361da98702bf97a021ddc14d'
-    secret = '62f8ce9f74b12f84c123cc23437a4a32'
-    gender = random.choice(['M', 'F'])
+    def Step1(self, FixData): #--> Input Name
+        Data = FixData.copy()
+        Data.update({
+            'firstname':self.name,
+            'welcome_step_completed':True,
+            'current_step_number':'0'})
+        cok = '; '.join(['%s=%s'%(key,value) for key,value in self.r.cookies.get_dict().items()]) + '; m_pixel_ratio=1.25; wd=360x780;'
+        pos = self.r.post('https://m.facebook.com/register/persist/', data=Data, headers=HeadersPost(), cookies={'cookie':cok}, allow_redirects=True).text
 
-    req = {
-        'api_key': api_key,
-        'attempt_login': True,
-        'birthday': birthday.strftime('%Y-%m-%d'),
-        'client_country_code': 'EN',
-        'fb_api_caller_class': 'com.facebook.registration.protocol.RegisterAccountMethod',
-        'fb_api_req_friendly_name': 'registerAccount',
-        'firstname': first_name,
-        'format': 'json',
-        'gender': gender,
-        'lastname': last_name,
-        'email': email,
-        'locale': 'en_US',
-        'method': 'user.register',
-        'password': password,
-        'reg_instance': generate_random_string(32),
-        'return_multiple_errors': True
-    }
+    def Step2(self, FixData): #--> Input Birthdate
+        Data = FixData.copy()
+        Data.update({
+            'birthday_day':self.birthday.split('/')[0],
+            'birthday_month':self.birthday.split('/')[1],
+            'birthday_year':self.birthday.split('/')[2],
+            'firstname':self.name,
+            'did_use_age':False,
+            'welcome_step_completed':True,
+            'current_step_number':'1'})
+        cok = '; '.join(['%s=%s'%(key,value) for key,value in self.r.cookies.get_dict().items()]) + '; m_pixel_ratio=1.25; wd=360x780;'
+        pos = self.r.post('https://m.facebook.com/register/persist/', data=Data, headers=HeadersPost(), cookies={'cookie':cok}, allow_redirects=True).text
 
-    sorted_req = sorted(req.items())
-    sig = ''.join(f'{k}={v}' for k, v in sorted_req)
-    req['sig'] = hashlib.md5((sig + secret).encode()).hexdigest()
+    def Step3(self, FixData): #--> Input Email Or Phone
+        Data = FixData.copy()
+        Data.update({
+            'birthday_day':self.birthday.split('/')[0],
+            'birthday_month':self.birthday.split('/')[1],
+            'birthday_year':self.birthday.split('/')[2],
+            'reg_email__':self.email,
+            'firstname':self.name,
+            'did_use_age':False,
+            'welcome_step_completed':True,
+            'current_step_number':'2'})
+        cok = '; '.join(['%s=%s'%(key,value) for key,value in self.r.cookies.get_dict().items()]) + '; m_pixel_ratio=1.25; wd=360x780;'
+        pos = self.r.post('https://m.facebook.com/register/persist/', data=Data, headers=HeadersPost(), cookies={'cookie':cok}, allow_redirects=True).text
 
-    reg = _call('https://b-api.facebook.com/method/user.register', req, proxy)
+    def Step4(self, FixData): #--> Input Gender
+        Data = FixData.copy()
+        Data.update({
+            'birthday_day':self.birthday.split('/')[0],
+            'birthday_month':self.birthday.split('/')[1],
+            'birthday_year':self.birthday.split('/')[2],
+            'sex':self.gender,
+            'reg_email__':self.email,
+            'firstname':self.name,
+            'use_custom_gender':False,
+            'did_use_age':False,
+            'welcome_step_completed':True,
+            'current_step_number':'3'})
+        cok = '; '.join(['%s=%s'%(key,value) for key,value in self.r.cookies.get_dict().items()]) + '; m_pixel_ratio=1.25; wd=360x780;'
+        pos = self.r.post('https://m.facebook.com/register/persist/', data=Data, headers=HeadersPost(), cookies={'cookie':cok}, allow_redirects=True).text
 
-    if 'new_user_id' in reg and 'session_info' in reg:
-        user_id = reg['new_user_id']
-        token = reg['session_info'].get('access_token', 'N/A')
+    def Step5(self, FixData): #--> Input Password
+        Data = FixData.copy()
+        Data.update({
+            'birthday_day':self.birthday.split('/')[0],
+            'birthday_month':self.birthday.split('/')[1],
+            'birthday_year':self.birthday.split('/')[2],
+            'sex':self.gender,
+            'reg_email__':self.email,
+            'firstname':self.name,
+            'use_custom_gender':False,
+            'did_use_age':False,
+            'welcome_step_completed':True,
+            'current_step_number':'3'})
+        cok = '; '.join(['%s=%s'%(key,value) for key,value in self.r.cookies.get_dict().items()]) + '; m_pixel_ratio=1.25; wd=360x780;'
+        pos = self.r.post('https://m.facebook.com/register/persist/', data=Data, headers=HeadersPost(), cookies={'cookie':cok}, allow_redirects=True).text
 
-        print(f'''
------------GENERATED-----------
-EMAIL : {email}
-ID : {user_id}
-PASSWORD : {password}
-NAME : {first_name} {last_name}
-BIRTHDAY : {birthday} 
-GENDER : {gender}
------------GENERATED-----------
-Token : {token}
------------GENERATED-----------''')
+    def GenerateEncpass(self, req):
+        tim, pbl, pbk = re.search('"__spin_t":(.*?),',str(req)).group(1), re.search('publicKey:"(.*?)",',str(req)).group(1), re.search('keyId:([0-9]+)',str(req)).group(1)
+        rdb = RDM.get_random_bytes((len(Author)-2)*2); dpt = AES.new(rdb, AES.MODE_GCM, nonce=bytes([0]*(len(Author)-6)), mac_len=len(Author)-2); dpt.update(str(tim).encode("utf-8"))
+        epw, ctg = dpt.encrypt_and_digest(self.password.encode("utf-8")); sld = SB(PK(binascii.unhexlify(str(pbl)))).encrypt(rdb)
+        ecp = base64.b64encode(bytes([1,int(pbk),*list(struct.pack('<h', len(sld))),*list(sld),*list(ctg),*list(epw)])).decode("utf-8")
+        Enc = '#PWD_BROWSER:%s:%s:%s'%(str(len(Author)-13),tim,str(ecp))
+        return(Enc)
 
-        with open('username.txt', 'a') as file:
-            file.write(f'{email} | {password} | {first_name} {last_name} | {birthday} | {gender} | {user_id} | {token}\n')
-    else:
-        print('[×] Failed to register account. Response:', reg)
-
-def test_proxy(proxy, q, valid_proxies):
-    if test_proxy_helper(proxy):
-        valid_proxies.append(proxy)
-    q.task_done()
-
-def test_proxy_helper(proxy):
-    try:
-        response = requests.get('https://api.mail.tm', proxies=proxy, timeout=5)
-        print(f'Pass: {proxy}')
-        return response.status_code == 200
-    except:
-        print(f'Fail: {proxy}')
-        return False
-
-def load_proxies():
-    try:
-        with open('proxies.txt', 'r') as file:
-            proxies = [line.strip() for line in file if line.strip()]
-            return [{'http': f'http://{proxy}', 'https': f'http://{proxy}'} for proxy in proxies]
-    except FileNotFoundError:
-        print('[!] proxies.txt not found — continuing without proxies.')
-        return [None]
-
-def get_working_proxies():
-    proxies = load_proxies()
-    if proxies == [None]:
-        return [None]
-
-    valid_proxies = []
-    q = Queue()
-    for proxy in proxies:
-        q.put(proxy)
-
-    for _ in range(10):
-        worker = threading.Thread(target=worker_test_proxy, args=(q, valid_proxies))
-        worker.daemon = True
-        worker.start()
-
-    q.join()
-    return valid_proxies if valid_proxies else [None]
-
-def worker_test_proxy(q, valid_proxies):
-    while True:
-        proxy = q.get()
-        if proxy is None:
-            break
-        test_proxy(proxy, q, valid_proxies)
-
-# MAIN EXECUTION
-working_proxies = get_working_proxies()
-
-try:
-    num_accounts = int(input('[+] How Many Accounts You Want:  '))
-    for _ in range(num_accounts):
-        proxy = random.choice(working_proxies)
-        email, password, first_name, last_name, birthday = create_mail_tm_account(proxy)
-        if all([email, password, first_name, last_name, birthday]):
-            register_facebook_account(email, password, first_name, last_name, birthday, proxy)
-        else:
-            print('[×] Failed to create mail account, skipping...')
-except ValueError:
-    print('[×] Invalid input. Please enter a number.')
-
-print('\x1b[38;5;208m⇼' * 60)
+    def FinalStep1(self, req):
+        encpass = self.GenerateEncpass(req)
+        Data = {
+            'ccp':re.search('name="ccp" value="(.*?)"',str(req)).group(1),
+            'reg_instance':re.search('name="reg_instance" value="(.*?)"',str(req)).group(1),
+            'submission_request':True,
+            'helper':'',
+            'reg_impression_id':re.search('name="reg_impression_id" value="(.*?)"',str(req)).group(1),
+            'ns':'1',
+            'zero_header_af_client':'',
+            'app_id':'',
+            'logger_id':re.search('name="logger_id" value="(.*?)"',str(req)).group(1),
+            'field_names[0]':'firstname',
+            'firstname':self.name,
+            'field_names[1]':'birthday_wrapper',
+            'birthday_day':self.birthday.split('/')[0],
+            'birthday_month':self.birthday.split('/')[1],
+            'birthday_year':self.birthday.split('/')[2],
+            'age_step_input':'',
+            'did_use_age':False,
+            'field_names[2]':'reg_email__',
+            'reg_email__':self.email,
+            'field_names[3]':'sex',
+            'sex':self.gender,
+            'preferred_pronoun':'',
+            'custom_gender':'',
+            'field_names[4]':'reg_passwd__',
+            'name_suggest_elig':False,
+            'was_shown_name_suggestions':False,
+            'did_use_suggested_name':False,
+            'use_custom_gender':False,
+            'guid':'',
+            'pre_form_step':'',
+            'encpass':encpass,
+            'submit':'Sign Up',
+            'fb_dtsg':re.search('"dtsg":{"token":"(.*?)"',str(req)).group(1),
+            'jazoest':re.search('name="jazoest" value="(.*?)"',str(req)).group(1),
+            'lsd':re.search('name="lsd" value="(.*?)"',str(req)).group(1),
+            '__dyn':'',
+            '__csr':'',
+            '__req':str(random.randrange(1,7)),
+            '__a':'',
+            '__user':'0'}
+        nek = 'https://m.facebook.com' + re.search('form method="post" action="(.*?)"',str(req)).group(1)
+        cok = '; '.join(['%s=%s'%(key,value) for key,value in self.r.cookies.get_dict().items()]) + '; m_pixel_ratio=1.25; wd=360x780;'
+        pos = self.r.post(nek, data=Data, headers=HeadersPost(), cookies={'cookie':cok}, allow_redirects=True).text
+        cok = '; '.join(['%s=%s'%(key,value) for key,value in self.r.cookies.get_dict().items()]) + '; m_pixel_ratio=1.25; wd=360x780;'
+        print(cok)

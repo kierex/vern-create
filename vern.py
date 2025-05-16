@@ -3,6 +3,7 @@ from queue import Queue
 import requests
 import random
 import string
+import json
 import hashlib
 from faker import Faker
 
@@ -29,7 +30,7 @@ def get_mail_domains(proxy=None):
         print(f'[×] E-mail Error : {response.text}')
     except Exception as e:
         print(f'[×] Error fetching domains: {e}')
-    return []
+    return None
 
 def create_mail_tm_account(proxy=None):
     fake = Faker()
@@ -102,21 +103,21 @@ def register_facebook_account(email, password, first_name, last_name, birthday, 
 
     reg = _call('https://b-api.facebook.com/method/user.register', req, proxy)
 
-    if reg.get('new_user_id') and reg.get('session_info'):
+    if 'new_user_id' in reg and 'session_info' in reg:
         user_id = reg['new_user_id']
         token = reg['session_info'].get('access_token', 'N/A')
 
         print(f'''
 -----------GENERATED-----------
-EMAIL     : {email}
-ID        : {user_id}
-PASSWORD  : {password}
-NAME      : {first_name} {last_name}
-BIRTHDAY  : {birthday} 
-GENDER    : {gender}
-TOKEN     : {token}
+EMAIL : {email}
+ID : {user_id}
+PASSWORD : {password}
+NAME : {first_name} {last_name}
+BIRTHDAY : {birthday} 
+GENDER : {gender}
 -----------GENERATED-----------
-''')
+Token : {token}
+-----------GENERATED-----------''')
 
         with open('username.txt', 'a') as file:
             file.write(f'{email} | {password} | {first_name} {last_name} | {birthday} | {gender} | {user_id} | {token}\n')
@@ -131,57 +132,59 @@ def test_proxy(proxy, q, valid_proxies):
 def test_proxy_helper(proxy):
     try:
         response = requests.get('https://api.mail.tm', proxies=proxy, timeout=5)
-        print(f'[✓] Working Proxy: {proxy["http"]}')
+        print(f'Pass: {proxy}')
         return response.status_code == 200
     except:
-        print(f'[×] Bad Proxy: {proxy["http"]}')
+        print(f'Fail: {proxy}')
         return False
 
 def load_proxies():
     try:
         with open('proxies.txt', 'r') as file:
             proxies = [line.strip() for line in file if line.strip()]
-        return [{'http': f'http://{proxy}', 'https': f'http://{proxy}'} for proxy in proxies]
+            return [{'http': f'http://{proxy}', 'https': f'http://{proxy}'} for proxy in proxies]
     except FileNotFoundError:
-        print('[×] proxies.txt not found.')
-        return []
+        print('[!] proxies.txt not found — continuing without proxies.')
+        return [None]
 
 def get_working_proxies():
     proxies = load_proxies()
+    if proxies == [None]:
+        return [None]
+
     valid_proxies = []
     q = Queue()
     for proxy in proxies:
         q.put(proxy)
 
     for _ in range(10):
-        threading.Thread(target=worker_test_proxy, args=(q, valid_proxies), daemon=True).start()
+        worker = threading.Thread(target=worker_test_proxy, args=(q, valid_proxies))
+        worker.daemon = True
+        worker.start()
 
     q.join()
-    return valid_proxies
+    return valid_proxies if valid_proxies else [None]
 
 def worker_test_proxy(q, valid_proxies):
-    while not q.empty():
+    while True:
         proxy = q.get()
-        if proxy:
-            test_proxy(proxy, q, valid_proxies)
+        if proxy is None:
+            break
+        test_proxy(proxy, q, valid_proxies)
 
-# MAIN
-if __name__ == "__main__":
-    working_proxies = get_working_proxies()
+# MAIN EXECUTION
+working_proxies = get_working_proxies()
 
-    if not working_proxies:
-        print('[×] No working proxies found. Please check your proxies.')
-    else:
-        try:
-            num_accounts = int(input('[+] How Many Accounts You Want:  '))
-            for _ in range(num_accounts):
-                proxy = random.choice(working_proxies)
-                result = create_mail_tm_account(proxy)
-                if all(result):
-                    register_facebook_account(*result, proxy)
-                else:
-                    print('[×] Failed to create mail account, skipping...')
-        except ValueError:
-            print('[×] Invalid input. Please enter a valid number.')
+try:
+    num_accounts = int(input('[+] How Many Accounts You Want:  '))
+    for _ in range(num_accounts):
+        proxy = random.choice(working_proxies)
+        email, password, first_name, last_name, birthday = create_mail_tm_account(proxy)
+        if all([email, password, first_name, last_name, birthday]):
+            register_facebook_account(email, password, first_name, last_name, birthday, proxy)
+        else:
+            print('[×] Failed to create mail account, skipping...')
+except ValueError:
+    print('[×] Invalid input. Please enter a number.')
 
-    print('\x1b[38;5;208m⇼' * 60)
+print('\x1b[38;5;208m⇼' * 60)

@@ -3,7 +3,6 @@ from queue import Queue
 import requests
 import random
 import string
-import json
 import hashlib
 from faker import Faker
 
@@ -30,7 +29,7 @@ def get_mail_domains(proxy=None):
         print(f'[×] E-mail Error : {response.text}')
     except Exception as e:
         print(f'[×] Error fetching domains: {e}')
-    return None
+    return []
 
 def create_mail_tm_account(proxy=None):
     fake = Faker()
@@ -103,21 +102,21 @@ def register_facebook_account(email, password, first_name, last_name, birthday, 
 
     reg = _call('https://b-api.facebook.com/method/user.register', req, proxy)
 
-    if 'new_user_id' in reg and 'session_info' in reg:
+    if reg.get('new_user_id') and reg.get('session_info'):
         user_id = reg['new_user_id']
         token = reg['session_info'].get('access_token', 'N/A')
 
         print(f'''
 -----------GENERATED-----------
-EMAIL : {email}
-ID : {user_id}
-PASSWORD : {password}
-NAME : {first_name} {last_name}
-BIRTHDAY : {birthday} 
-GENDER : {gender}
+EMAIL     : {email}
+ID        : {user_id}
+PASSWORD  : {password}
+NAME      : {first_name} {last_name}
+BIRTHDAY  : {birthday} 
+GENDER    : {gender}
+TOKEN     : {token}
 -----------GENERATED-----------
-Token : {token}
------------GENERATED-----------''')
+''')
 
         with open('username.txt', 'a') as file:
             file.write(f'{email} | {password} | {first_name} {last_name} | {birthday} | {gender} | {user_id} | {token}\n')
@@ -132,10 +131,10 @@ def test_proxy(proxy, q, valid_proxies):
 def test_proxy_helper(proxy):
     try:
         response = requests.get('https://api.mail.tm', proxies=proxy, timeout=5)
-        print(f'Pass: {proxy}')
+        print(f'[✓] Working Proxy: {proxy["http"]}')
         return response.status_code == 200
     except:
-        print(f'Fail: {proxy}')
+        print(f'[×] Bad Proxy: {proxy["http"]}')
         return False
 
 def load_proxies():
@@ -154,37 +153,35 @@ def get_working_proxies():
     for proxy in proxies:
         q.put(proxy)
 
-    for _ in range(10):  # 10 threads
-        worker = threading.Thread(target=worker_test_proxy, args=(q, valid_proxies))
-        worker.daemon = True
-        worker.start()
+    for _ in range(10):
+        threading.Thread(target=worker_test_proxy, args=(q, valid_proxies), daemon=True).start()
 
     q.join()
     return valid_proxies
 
 def worker_test_proxy(q, valid_proxies):
-    while True:
+    while not q.empty():
         proxy = q.get()
-        if proxy is None:
-            break
-        test_proxy(proxy, q, valid_proxies)
+        if proxy:
+            test_proxy(proxy, q, valid_proxies)
 
-# MAIN EXECUTION
-working_proxies = get_working_proxies()
+# MAIN
+if __name__ == "__main__":
+    working_proxies = get_working_proxies()
 
-if not working_proxies:
-    print('[×] No working proxies found. Please check your proxies.')
-else:
-    try:
-        num_accounts = int(input('[+] How Many Accounts You Want:  '))
-        for _ in range(num_accounts):
-            proxy = random.choice(working_proxies)
-            email, password, first_name, last_name, birthday = create_mail_tm_account(proxy)
-            if all([email, password, first_name, last_name, birthday]):
-                register_facebook_account(email, password, first_name, last_name, birthday, proxy)
-            else:
-                print('[×] Failed to create mail account, skipping...')
-    except ValueError:
-        print('[×] Invalid input. Please enter a number.')
+    if not working_proxies:
+        print('[×] No working proxies found. Please check your proxies.')
+    else:
+        try:
+            num_accounts = int(input('[+] How Many Accounts You Want:  '))
+            for _ in range(num_accounts):
+                proxy = random.choice(working_proxies)
+                result = create_mail_tm_account(proxy)
+                if all(result):
+                    register_facebook_account(*result, proxy)
+                else:
+                    print('[×] Failed to create mail account, skipping...')
+        except ValueError:
+            print('[×] Invalid input. Please enter a valid number.')
 
-print('\x1b[38;5;208m⇼' * 60)
+    print('\x1b[38;5;208m⇼' * 60)
